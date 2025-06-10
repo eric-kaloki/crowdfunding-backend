@@ -23,10 +23,17 @@ initializeWebSocket(server);
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" } // Allow cross-origin resource sharing
 }));
-app.use(cors({
-  origin: [process.env.FRONTEND_URL, /\.ngrok-free\.app$/, 'http://localhost:8080'],
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: [
+      process.env.FRONTEND_URL,
+      /\.ngrok-free\.app$/,
+      "http://localhost:8080",
+      "https://www.transcends-corp.tech/",
+    ],
+    credentials: true,
+  })
+);
 app.use(morgan('dev'));
 
 // Serve static files for uploads with proper headers
