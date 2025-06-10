@@ -155,8 +155,6 @@ router.post('/upload-certificate', async (req, res) => {
       return res.status(500).json({ error: 'Failed to upload certificate to storage' });
     }
 
-    console.log('File uploaded successfully:', uploadData);
-
     // Get public URL
     const { data: urlData } = supabase.storage
       .from('organization-certificates')

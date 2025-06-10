@@ -51,18 +51,18 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve static files for uploads with proper headers
-app.use('/uploads', (req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-  next();
-}, express.static('uploads', {
-  setHeaders: (res, path) => {
-    if (path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.png') || path.endsWith('.gif')) {
-      res.setHeader('Cache-Control', 'public, max-age=31536000');
-    }
-  }
-}));
+// Remove or comment out the local uploads static file serving since we're using Supabase
+// app.use('/uploads', (req, res, next) => {
+//   res.header('Access-Control-Allow-Origin', '*');
+//   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+//   next();
+// }, express.static('uploads', {
+//   setHeaders: (res, path) => {
+//     if (path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.png') || path.endsWith('.gif')) {
+//       res.setHeader('Cache-Control', 'public, max-age=31536000');
+//     }
+//   }
+// }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

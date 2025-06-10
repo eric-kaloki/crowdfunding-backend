@@ -94,14 +94,13 @@ router.patch('/me', authenticate, async (req, res) => {
   }
 });
 
-// Upload profile picture - simplified to use express-fileupload
+// Upload profile picture - Updated to use Supabase Storage
 router.post('/upload-picture', authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
 
     console.log('Profile picture upload request received');
     console.log('Files:', req.files);
-    console.log('Body:', req.body);
 
     if (!req.files || !req.files.profilePicture) {
       console.log('No file received in request');
@@ -120,24 +119,52 @@ router.post('/upload-picture', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'File size must be less than 5MB' });
     }
 
-    // Create upload directory
-    const uploadDir = 'uploads/profiles';
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+    // Generate unique filename for Supabase Storage
+    const fileExtension = file.name.split('.').pop();
+    const fileName = `profile_${userId}_${Date.now()}.${fileExtension}`;
+    
+    console.log('Uploading file to Supabase Storage:', fileName);
+
+    // Upload to Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('profile-pictures')
+      .upload(fileName, file.data, {
+        contentType: file.mimetype,
+        cacheControl: '3600',
+        upsert: true // Allow overwriting
+      });
+
+    if (uploadError) {
+      console.error('Profile picture upload error:', uploadError);
+      return res.status(500).json({ error: 'Failed to upload profile picture to storage' });
     }
 
-    // Generate unique filename
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const filename = `profile-${userId}-${uniqueSuffix}${path.extname(file.name)}`;
-    const filepath = path.join(uploadDir, filename);
+    console.log('File uploaded successfully:', uploadData);
 
-    // Move file to upload directory
-    await file.mv(filepath);
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('profile-pictures')
+      .getPublicUrl(fileName);
 
-    // Create the profile picture URL
-    const profilePictureUrl = `/uploads/profiles/${filename}`;
-
+    const profilePictureUrl = urlData.publicUrl;
     console.log('Generated profile picture URL:', profilePictureUrl);
+
+    // Delete old profile picture if it exists
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('profile_picture')
+      .eq('id', userId)
+      .single();
+
+    if (currentProfile?.profile_picture) {
+      // Extract filename from old URL if it's a Supabase Storage URL
+      const oldFileName = currentProfile.profile_picture.split('/').pop();
+      if (oldFileName && oldFileName !== fileName) {
+        await supabase.storage
+          .from('profile-pictures')
+          .remove([oldFileName]);
+      }
+    }
 
     // Update profile with new picture URL
     const { data: updatedProfile, error } = await supabase
@@ -153,9 +180,9 @@ router.post('/upload-picture', authenticate, async (req, res) => {
     if (error) {
       console.error('Database update error:', error);
       // Delete uploaded file if database update fails
-      if (fs.existsSync(filepath)) {
-        fs.unlinkSync(filepath);
-      }
+      await supabase.storage
+        .from('profile-pictures')
+        .remove([fileName]);
       return res.status(500).json({ error: 'Failed to update profile picture' });
     }
 
@@ -219,7 +246,7 @@ router.patch('/organization', authenticate, async (req, res) => {
   }
 });
 
-// Delete profile picture
+// Delete profile picture - Updated for Supabase Storage
 router.delete('/picture', authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -232,10 +259,12 @@ router.delete('/picture', authenticate, async (req, res) => {
       .single();
 
     if (profile?.profile_picture) {
-      // Delete file from filesystem
-      const filePath = path.join(process.cwd(), profile.profile_picture);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      // Extract filename from URL if it's a Supabase Storage URL
+      const fileName = profile.profile_picture.split('/').pop();
+      if (fileName) {
+        await supabase.storage
+          .from('profile-pictures')
+          .remove([fileName]);
       }
     }
 
