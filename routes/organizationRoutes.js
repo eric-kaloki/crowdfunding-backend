@@ -3,6 +3,12 @@ const router = express.Router();
 const { supabase } = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 
+// Debug middleware
+router.use((req, res, next) => {
+  console.log('Organization route accessed:', req.method, req.path, 'User:', req.user?.id);
+  next();
+});
+
 // Apply authentication to all routes
 router.use(authenticate);
 
@@ -10,22 +16,50 @@ router.use(authenticate);
 router.get('/profile', async (req, res) => {
   try {
     const userId = req.user.id;
+    console.log('Fetching organization profile for user:', userId);
 
-    const { data: organization, error } = await supabase
+    // First check if user exists and has organization role
+    const { data: user, error: userError } = await supabase
+      .from('profiles')
+      .select('id, role, name, email')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !user) {
+      console.error('User not found:', userError);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log('User found:', user);
+
+    // Check if user has organization role
+    if (user.role !== 'organization') {
+      console.log('User is not an organization:', user.role);
+      return res.status(403).json({ error: 'User is not an organization' });
+    }
+
+    // Try to find organization record
+    const { data: organization, error: orgError } = await supabase
       .from('organizations')
       .select('*')
       .eq('user_id', userId)
       .single();
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
-      console.error('Error fetching organization profile:', error);
+    console.log('Organization query result:', { organization, error: orgError });
+
+    if (orgError && orgError.code !== 'PGRST116') { // PGRST116 is "not found"
+      console.error('Error fetching organization profile:', orgError);
       return res.status(500).json({ error: 'Failed to fetch organization profile' });
     }
 
     if (!organization) {
-      return res.status(404).json({ error: 'Organization profile not found' });
+      console.log('No organization record found for user:', userId);
+      return res.status(404).json({ 
+        error: 'Organization profile not found. Please contact support to complete your organization setup.' 
+      });
     }
 
+    console.log('Returning organization profile:', organization);
     res.json(organization);
   } catch (error) {
     console.error('Organization profile fetch error:', error);
@@ -62,7 +96,24 @@ router.post('/upload-certificate', async (req, res) => {
       return res.status(400).json({ error: 'File size too large. Maximum 10MB allowed.' });
     }
 
-    // Check if organization exists
+    // First check if user has organization role
+    const { data: user, error: userError } = await supabase
+      .from('profiles')
+      .select('id, role, name, email')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !user) {
+      console.error('User not found for certificate upload:', userId, userError);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.role !== 'organization') {
+      console.error('User is not an organization:', user.role);
+      return res.status(403).json({ error: 'Only organizations can upload certificates' });
+    }
+
+    // Check if organization exists - DO NOT create if it doesn't
     const { data: existingOrg, error: fetchError } = await supabase
       .from('organizations')
       .select('id, organization_name')
@@ -70,8 +121,10 @@ router.post('/upload-certificate', async (req, res) => {
       .single();
 
     if (fetchError || !existingOrg) {
-      console.error('Organization not found for user:', userId, fetchError);
-      return res.status(404).json({ error: 'Organization profile not found. Please contact support.' });
+      console.error('Organization record not found for user:', userId, fetchError);
+      return res.status(404).json({ 
+        error: 'Organization profile not found. Please contact support to complete your organization setup.' 
+      });
     }
 
     console.log('Found organization:', existingOrg.organization_name);

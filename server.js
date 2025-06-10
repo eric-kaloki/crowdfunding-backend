@@ -48,6 +48,7 @@ app.use((req, res, next) => {
   const origin = req.headers.origin;
   console.log('Request from origin:', origin);
   console.log('Request method:', req.method);
+  console.log('Request path:', req.path);
   next();
 });
 
@@ -88,6 +89,16 @@ app.use('/api/campaigns', require('./routes/campaignRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/organizations', require('./routes/organizationRoutes'));
+
+// Add a catch-all route for debugging
+app.use('/api/*', (req, res) => {
+  console.log('Unmatched API route:', req.method, req.originalUrl);
+  res.status(404).json({ 
+    error: 'API route not found',
+    path: req.originalUrl,
+    method: req.method
+  });
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
