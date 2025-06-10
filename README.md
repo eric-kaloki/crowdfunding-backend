@@ -240,7 +240,7 @@ npm run dev
 npm start
 ```
 
-The server will be available at `http://localhost:5000`
+The server will be available at `https://crowdfunding-backend-r9z5.onrender.com/api`
 
 ## 🔌 API Documentation
 
