@@ -3,12 +3,6 @@ const router = express.Router();
 const { supabase } = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 
-// Debug middleware
-router.use((req, res, next) => {
-  console.log('Organization route accessed:', req.method, req.path, 'User:', req.user?.id);
-  next();
-});
-
 // Apply authentication to all routes
 router.use(authenticate);
 
@@ -16,50 +10,51 @@ router.use(authenticate);
 router.get('/profile', async (req, res) => {
   try {
     const userId = req.user.id;
-    console.log('Fetching organization profile for user:', userId);
 
-    // First check if user exists and has organization role
-    const { data: user, error: userError } = await supabase
-      .from('profiles')
-      .select('id, role, name, email')
-      .eq('id', userId)
-      .single();
-
-    if (userError || !user) {
-      console.error('User not found:', userError);
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    console.log('User found:', user);
-
-    // Check if user has organization role
-    if (user.role !== 'organization') {
-      console.log('User is not an organization:', user.role);
-      return res.status(403).json({ error: 'User is not an organization' });
-    }
-
-    // Try to find organization record
-    const { data: organization, error: orgError } = await supabase
+    const { data: organization, error } = await supabase
       .from('organizations')
       .select('*')
       .eq('user_id', userId)
       .single();
 
-    console.log('Organization query result:', { organization, error: orgError });
-
-    if (orgError && orgError.code !== 'PGRST116') { // PGRST116 is "not found"
-      console.error('Error fetching organization profile:', orgError);
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
+      console.error('Error fetching organization profile:', error);
       return res.status(500).json({ error: 'Failed to fetch organization profile' });
     }
 
     if (!organization) {
-      console.log('No organization record found for user:', userId);
-      return res.status(404).json({ 
-        error: 'Organization profile not found. Please contact support to complete your organization setup.' 
-      });
+      // If no organization record exists, create a basic one for organization users
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('name, role')
+        .eq('id', userId)
+        .single();
+
+      if (userProfile && userProfile.role === 'organization') {
+        // Create a minimal organization record
+        const { data: newOrg, error: createError } = await supabase
+          .from('organizations')
+          .insert({
+            user_id: userId,
+            organization_name: userProfile.name,
+            organization_description: 'Please update your organization description',
+            contact_person: userProfile.name,
+            approval_status: 'pending'
+          })
+          .select('*')
+          .single();
+
+        if (createError) {
+          console.error('Error creating organization record:', createError);
+          return res.status(500).json({ error: 'Failed to create organization profile' });
+        }
+
+        return res.json(newOrg);
+      }
+
+      return res.status(404).json({ error: 'Organization profile not found' });
     }
 
-    console.log('Returning organization profile:', organization);
     res.json(organization);
   } catch (error) {
     console.error('Organization profile fetch error:', error);
@@ -96,38 +91,50 @@ router.post('/upload-certificate', async (req, res) => {
       return res.status(400).json({ error: 'File size too large. Maximum 10MB allowed.' });
     }
 
-    // First check if user has organization role
-    const { data: user, error: userError } = await supabase
-      .from('profiles')
-      .select('id, role, name, email')
-      .eq('id', userId)
-      .single();
-
-    if (userError || !user) {
-      console.error('User not found for certificate upload:', userId, userError);
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    if (user.role !== 'organization') {
-      console.error('User is not an organization:', user.role);
-      return res.status(403).json({ error: 'Only organizations can upload certificates' });
-    }
-
-    // Check if organization exists - DO NOT create if it doesn't
+    // Check if organization exists, create if it doesn't
+    let organization;
     const { data: existingOrg, error: fetchError } = await supabase
       .from('organizations')
       .select('id, organization_name')
       .eq('user_id', userId)
       .single();
 
-    if (fetchError || !existingOrg) {
-      console.error('Organization record not found for user:', userId, fetchError);
-      return res.status(404).json({ 
-        error: 'Organization profile not found. Please contact support to complete your organization setup.' 
-      });
+    if (fetchError && fetchError.code === 'PGRST116') {
+      // Organization doesn't exist, create it
+      console.log('Organization not found, creating new record for user:', userId);
+      
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', userId)
+        .single();
+
+      const { data: newOrg, error: createError } = await supabase
+        .from('organizations')
+        .insert({
+          user_id: userId,
+          organization_name: userProfile?.name || 'Organization',
+          organization_description: 'Please update your organization description',
+          contact_person: userProfile?.name || 'Contact Person',
+          approval_status: 'pending'
+        })
+        .select('id, organization_name')
+        .single();
+
+      if (createError) {
+        console.error('Error creating organization:', createError);
+        return res.status(500).json({ error: 'Failed to create organization profile' });
+      }
+
+      organization = newOrg;
+    } else if (fetchError) {
+      console.error('Error fetching organization:', fetchError);
+      return res.status(500).json({ error: 'Failed to fetch organization profile' });
+    } else {
+      organization = existingOrg;
     }
 
-    console.log('Found organization:', existingOrg.organization_name);
+    console.log('Found/created organization:', organization.organization_name);
 
     // Generate unique filename
     const fileExtension = certificateFile.name.split('.').pop();

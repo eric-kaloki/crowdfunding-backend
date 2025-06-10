@@ -51,11 +51,11 @@ router.post('/register', async (req, res) => {
 
     console.log('User created successfully:', newUser.id);
 
-    // Handle organization creation synchronously for organization users
+    // Handle organization creation asynchronously to speed up response
     if (role === 'organization' && organizationData) {
-      console.log('Creating organization record for new organization user...');
-      
-      const { data: orgData, error: orgError } = await supabase
+      console.log('Creating organization record...');
+      // Don't await this - handle it asynchronously
+      supabase
         .from('organizations')
         .insert({
           user_id: newUser.id,
@@ -63,20 +63,15 @@ router.post('/register', async (req, res) => {
           organization_description: organizationData.organizationDescription,
           organization_registration_number: organizationData.registrationNumber,
           contact_person: organizationData.contactPerson || name,
-          approval_status: 'pending',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          approval_status: 'pending' // Ensure this is set correctly
         })
-        .select('*')
-        .single();
-
-      if (orgError) {
-        console.error('Organization creation error:', orgError);
-        // Don't fail the registration, but log the error
-        console.log('User created but organization record failed - will be created on first profile access');
-      } else {
-        console.log('Organization record created successfully:', orgData.id);
-      }
+        .then(({ error: orgError }) => {
+          if (orgError) {
+            console.error('Organization creation error (async):', orgError);
+          } else {
+            console.log('Organization record created successfully');
+          }
+        });
     }
 
     // Generate and send OTP asynchronously to speed up response
