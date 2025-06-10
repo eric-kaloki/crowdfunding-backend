@@ -21,20 +21,35 @@ initializeWebSocket(server);
 
 // Middleware
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" } // Allow cross-origin resource sharing
+  crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
-app.use(
-  cors({
-    origin: [
-      process.env.FRONTEND_URL,
-      /\.ngrok-free\.app$/,
-      "http://localhost:8080",
-      "https://www.transcends-corp.tech/",
-    ],
-    credentials: true,
-  })
-);
+
+app.use(cors({
+  origin: [
+    process.env.FRONTEND_URL,
+    /\.ngrok-free\.app$/,
+    "http://localhost:8080",
+    "https://www.transcends-corp.tech",
+    "https://transcends-corp.tech",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://transcends-frontend.vercel.app"
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  optionsSuccessStatus: 200
+}));
+
 app.use(morgan('dev'));
+
+// Add debugging middleware for CORS
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  console.log('Request from origin:', origin);
+  console.log('Request method:', req.method);
+  next();
+});
 
 // Serve static files for uploads with proper headers
 app.use('/uploads', (req, res, next) => {
@@ -43,9 +58,8 @@ app.use('/uploads', (req, res, next) => {
   next();
 }, express.static('uploads', {
   setHeaders: (res, path) => {
-    // Set cache headers for images
     if (path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.png') || path.endsWith('.gif')) {
-      res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year
+      res.setHeader('Cache-Control', 'public, max-age=31536000');
     }
   }
 }));
@@ -53,13 +67,13 @@ app.use('/uploads', (req, res, next) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Configure express-fileupload with proper settings
+// Configure express-fileupload
 app.use(fileUpload({
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max file size
+  limits: { fileSize: 10 * 1024 * 1024 },
   createParentPath: true,
-  useTempFiles: false, // Use memory instead of temp files
+  useTempFiles: false,
   tempFileDir: '/tmp/',
-  debug: false, // Set to true for debugging
+  debug: false,
   parseNested: true,
   preserveExtension: true,
   safeFileNames: true,
@@ -81,27 +95,26 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-// Routes
+// Health check route
 app.get('/', (req, res) => {
   res.send(`
-      <html>
-          <head>
-              <title>Transcends Corp API</title>
-          </head>
-          <body>
-              <h1>Hello from Transcends Corp API</h1>
-          </body>
-      </html>
+    <html>
+      <head>
+        <title>Transcends Corp API</title>
+      </head>
+      <body>
+        <h1>Hello from Transcends Corp API</h1>
+        <p>Server is running properly!</p>
+      </body>
+    </html>
   `);
 });
 
-// List of backend URLs to ping
+// Keep-alive ping functionality
 const backendUrls = [
-  // 'https://677b-197-136-134-5.ngrok-free.app',
   'https://google.com'
-]; // Add more URLs as needed
+];
 
-// Function to ping each backend URL
 function pingBackends() {
   backendUrls.forEach((url) => {
     https.get(url, (res) => {
@@ -112,10 +125,8 @@ function pingBackends() {
   });
 }
 
-// Schedule pings every 10 minutes (600,000 milliseconds)
+// Schedule pings every 10 minutes
 setInterval(pingBackends, 600000);
-
-// Ping immediately when the service starts
 pingBackends();
 
 // Start server
