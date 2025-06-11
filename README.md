@@ -112,8 +112,8 @@ backend/
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/your-org/transcends-backend.git
-cd transcends-backend
+git clone https://github.com/your-org/crowdfunding-backend.git
+cd crowdfunding-backend
 ```
 
 2. **Install dependencies**
@@ -946,7 +946,7 @@ app.use('/api/auth/login', authLimiter);
 
 ## 📞 Contact & Support
 
-- **Development Team**: transcends.corp@gmail.com
+- **Development Team**: Email us (transcends.corp@gmail.com)
 - **Documentation**: [GitHub Wiki](https://github.com/your-org/transcends-backend/wiki)
 - **Issues**: [GitHub Issues](https://github.com/your-org/transcends-backend/issues)
 - **API Documentation**: [Postman Collection](link-to-postman)
